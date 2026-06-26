@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fazenda Eunice - Pesagem Pro</title>
+    <style>
+        :root { --primary: #002366; --white: #ffffff; --bg: #f4f7f9; --accent: #28a745; --danger: #dc3545; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 0; color: var(--primary); overflow: hidden; }
+        .app { display: flex; flex-direction: column; height: 100vh; }
+        
+        .header { background: var(--primary); color: white; padding: 15px; text-align: center; }
+        .header .date { font-size: 16px; font-weight: bold; text-transform: capitalize; }
+
+        .nav { display: flex; background: #001a4d; padding: 5px; gap: 5px; }
+        .nav-btn { flex: 1; padding: 15px; border: none; background: transparent; color: rgba(255,255,255,0.6); border-radius: 8px; font-weight: bold; font-size: 16px; }
+        .nav-btn.active { background: var(--white); color: var(--primary); }
+
+        .stats-bar { display: flex; background: #e9ecef; padding: 10px; gap: 10px; border-bottom: 2px solid #dee2e6; }
+        .stat-box { flex: 1; background: white; padding: 10px; border-radius: 8px; text-align: center; }
+        .stat-box span { display: block; font-size: 11px; color: #666; font-weight: bold; }
+        .stat-box strong { font-size: 18px; color: var(--primary); }
+
+        .content { flex: 1; padding: 15px; overflow-y: auto; box-sizing: border-box; }
+        .hidden { display: none; }
+
+        .weight-area { background: var(--primary); color: white; padding: 25px; border-radius: 15px; text-align: center; margin-bottom: 15px; }
+        .weight-area input { background: transparent; border: none; color: white; font-size: 70px; width: 100%; text-align: center; font-weight: bold; outline: none; }
+        
+        .id-input input { width: 100%; padding: 15px; font-size: 28px; border: 3px solid var(--primary); border-radius: 12px; text-align: center; box-sizing: border-box; margin-bottom: 15px; }
+
+        .grid-lotes { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+        .btn-lote { background: var(--primary); color: white; border: none; padding: 30px 10px; font-size: 22px; font-weight: bold; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+
+        .card { background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+        th, td { padding: 12px; border-bottom: 1px solid #f0f0f0; text-align: center; }
+        input.edit-cell { width: 100%; border: 1px solid #ddd; padding: 5px; text-align: center; border-radius: 4px; }
+
+        /* Toggle Switch */
+        .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent); }
+        input:checked + .slider:before { transform: translateX(26px); }
+
+        .btn-add { background: var(--primary); color: white; width: 100%; padding: 18px; font-size: 18px; margin-top: 10px; border-radius: 10px; border: none; font-weight: bold; }
+        .btn-small { padding: 8px 12px; border-radius: 6px; border: none; font-weight: bold; font-size: 12px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <div class="header">
+        <div class="date" id="current-date"></div>
+    </div>
+
+    <div class="nav">
+        <button class="nav-btn active" onclick="tab('pesagem', this)">PESAGEM</button>
+        <button class="nav-btn" onclick="tab('sessões', this)">SESSÕES</button>
+        <button class="nav-btn" onclick="tab('arquivos', this)">ARQUIVOS</button>
+    </div>
+
+    <div class="stats-bar">
+        <div class="stat-box"><span>ANIMAIS</span><strong id="stat-count">0</strong></div>
+        <div class="stat-box"><span>MÉDIA PESO</span><strong id="stat-avg">0.0 kg</strong></div>
+    </div>
+
+    <!-- ABA PESAGEM -->
+    <div class="content" id="tab-pesagem">
+        <div class="weight-area">
+            <label style="font-size: 12px; opacity: 0.8;">PESO (KG)</label>
+            <input type="number" id="peso" placeholder="0.0" step="0.1" inputmode="decimal">
+        </div>
+        <div class="id-input">
+            <input type="number" id="brinco" placeholder="BRINCO (ID)" inputmode="numeric">
+        </div>
+        <div class="grid-lotes" id="grid-lotes"></div>
+    </div>
+
+    <!-- ABA SESSÕES -->
+    <div class="content hidden" id="tab-sessões">
+        <div id="lista-sessoes"></div>
+    </div>
+
+    <!-- ABA ARQUIVOS -->
+    <div class="content hidden" id="tab-arquivos">
+        <div id="lista-arquivos"></div>
+        <button class="btn-add" onclick="novoArquivo()">+ NOVO ARQUIVO/LOTE</button>
+    </div>
+</div>
+
+<script>
+    let dados = JSON.parse(localStorage.getItem('eunice_db')) || [];
+    let arquivos = JSON.parse(localStorage.getItem('eunice_files')) || [{ id: 1, nome: 'Lote 01', ativo: true }];
+
+    function tab(id, btn) {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.content').forEach(c => c.classList.add('hidden'));
+        document.getElementById('tab-' + id).classList.remove('hidden');
+        updateStats();
+        if(id === 'pesagem') renderPesagem();
+        if(id === 'sessões') renderSessoes();
+        if(id === 'arquivos') renderArquivos();
+    }
+
+    function updateStats() {
+        const count = dados.length;
+        const avg = count > 0 ? (dados.reduce((s, r) => s + parseFloat(r.peso), 0) / count).toFixed(1) : "0.0";
+        document.getElementById('stat-count').innerText = count;
+        document.getElementById('stat-avg').innerText = avg + " kg";
+    }
+
+    function renderPesagem() {
+        const grid = document.getElementById('grid-lotes');
+        grid.innerHTML = '';
+        arquivos.filter(a => a.ativo).slice(0, 6).forEach(arq => {
+            const b = document.createElement('button');
+            b.className = 'btn-lote';
+            b.innerText = arq.nome;
+            b.onclick = () => salvar(arq.nome);
+            grid.appendChild(b);
+        });
+    }
+
+    function salvar(lote) {
+        const p = document.getElementById('peso').value;
+        const b = document.getElementById('brinco').value;
+        if(!p) return alert("Peso vazio!");
+        dados.push({ id: Date.now(), data: new Date().toLocaleString('pt-BR'), brinco: b || 'S/ID', peso: p, lote: lote });
+        localStorage.setItem('eunice_db', JSON.stringify(dados));
+        document.getElementById('peso').value = '';
+        document.getElementById('brinco').value = '';
+        document.getElementById('peso').focus();
+        updateStats();
+    }
+
+    function renderSessoes() {
+        const container = document.getElementById('lista-sessoes');
+        container.innerHTML = '';
+        const grupos = [...new Set(dados.map(d => d.lote))];
+        
+        grupos.forEach(g => {
+            const itens = dados.filter(d => d.lote === g);
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `
+                <div class="card-header">
+                    <strong>${g} (${itens.length} cab.)</strong>
+                    <div style="display:flex; gap:5px">
+                        <button class="btn-small" style="background:var(--accent); color:white" onclick="exportar('${g}')">CSV</button>
+                        <button class="btn-small" style="background:var(--danger); color:white" onclick="limparLote('${g}')">LIMPAR</button>
+                    </div>
+                </div>
+                <table>
+                    <thead><tr><th>Brinco</th><th>Peso</th><th>Ação</th></tr></thead>
+                    <tbody>
+                        ${itens.slice().reverse().map(i => `
+                            <tr>
+                                <td><input class="edit-cell" type="text" value="${i.brinco}" onchange="editar(${i.id}, 'brinco', this.value)"></td>
+                                <td><input class="edit-cell" type="number" value="${i.peso}" onchange="editar(${i.id}, 'peso', this.value)"></td>
+                                <td><button onclick="remover(${i.id})" style="color:var(--danger); border:none; background:none; font-weight:bold">X</button></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function renderArquivos() {
+        const container = document.getElementById('lista-arquivos');
+        container.innerHTML = '';
+        arquivos.forEach((arq, i) => {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.style.display = 'flex'; div.style.justifyContent = 'space-between'; div.style.alignItems = 'center';
+            div.innerHTML = `
+                <input type="text" value="${arq.nome}" onchange="renomear(${i}, this.value)" style="border:1px solid #ccc; padding:10px; border-radius:8px; width:60%; font-size:16px">
+                <div style="display:flex; align-items:center; gap:10px">
+                    <label class="switch"><input type="checkbox" ${arq.ativo ? 'checked' : ''} onchange="toggle(${i})"><span class="slider"></span></label>
+                    <button onclick="apagarArq(${i})" style="color:var(--danger); border:none; background:none; font-size:20px; font-weight:bold">×</button>
+                </div>`;
+            container.appendChild(div);
+        });
+    }
+
+    function editar(id, campo, valor) {
+        const index = dados.findIndex(d => d.id === id);
+        if (index !== -1) {
+            dados[index][campo] = valor;
+            localStorage.setItem('eunice_db', JSON.stringify(dados));
+            updateStats();
+        }
+    }
+
+    function remover(id) {
+        if(confirm("Excluir este registro?")) {
+            dados = dados.filter(d => d.id !== id);
+            localStorage.setItem('eunice_db', JSON.stringify(dados));
+            renderSessoes();
+            updateStats();
+        }
+    }
+
+    function limparLote(lote) {
+        if(confirm(`Deseja apagar todos os dados do ${lote}? Certifique-se de ter exportado o CSV.`)) {
+            dados = dados.filter(d => d.lote !== lote);
+            localStorage.setItem('eunice_db', JSON.stringify(dados));
+            renderSessoes();
+            updateStats();
+        }
+    }
+
+    function exportar(lote) {
+        const filtrados = dados.filter(d => d.lote === lote);
+        let csv = "Data,Brinco,Peso,Lote\n";
+        filtrados.forEach(f => csv += `${f.data},${f.brinco},${f.peso},${f.lote}\n`);
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `pesagem_${lote}.csv`; a.click();
+    }
+
+    function novoArquivo() {
+        arquivos.push({ id: Date.now(), nome: `Lote ${arquivos.length + 1}`, ativo: false });
+        localStorage.setItem('eunice_files', JSON.stringify(arquivos));
+        renderArquivos();
+    }
+
+    function renomear(i, val) { arquivos[i].nome = val; localStorage.setItem('eunice_files', JSON.stringify(arquivos)); }
+    
+    function toggle(i) {
+        const ativos = arquivos.filter(a => a.ativo).length;
+        if(!arquivos[i].ativo && ativos >= 6) { alert("Máximo 6 ativos na tela principal."); renderArquivos(); return; }
+        arquivos[i].ativo = !arquivos[i].ativo; localStorage.setItem('eunice_files', JSON.stringify(arquivos));
+    }
+
+    function apagarArq(i) {
+        const nome = arquivos[i].nome;
+        if(confirm(`Apagar o arquivo "${nome}"? Isso não apaga os dados já pesados, apenas remove o botão.`)) {
+            arquivos.splice(i, 1);
+            localStorage.setItem('eunice_files', JSON.stringify(arquivos));
+            renderArquivos();
+        }
+    }
+
+    const d = new Date();
+    const opcoes = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    document.getElementById('current-date').innerText = d.toLocaleDateString('pt-BR', opcoes);
+
+    renderPesagem();
+    updateStats();
+</script>
+</body>
+</html>
